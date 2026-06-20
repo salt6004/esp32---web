@@ -170,7 +170,7 @@
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-gray-700">
-                    <div class="text-gray-400">左スティックY軸 (前後): <span id="debug-y">0.00</span></div>
+                    <div class="text-gray-400">前進/後退入力 (左/右Y軸): <span id="debug-y">0.00</span></div>
                     <div class="text-gray-400">右スティックX軸 (旋回): <span id="debug-x">0.00</span></div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-gray-700">
@@ -248,6 +248,8 @@
         const LEFT_STICK_Y_AXIS = 1;
         // 右スティックの左右 (標準的なコントローラーでは2番、たまに3番)
         const RIGHT_STICK_X_AXIS = 2; 
+        // 右スティックの上下 (標準的なコントローラーでは3番)
+        const RIGHT_STICK_Y_AXIS = 3;
 
         // --- Bluetooth接続処理 ---
         connectBtn.addEventListener('click', async () => {
@@ -424,15 +426,21 @@
                     debugMapping.textContent = 'mapping: ' + (gamepad.mapping || '(empty/raw)');
 
                     // --- スティック入力処理 ---
-                    // 左スティックY軸で前進後退、右スティックX軸で旋回
-                    let rawForward = -gamepad.axes[LEFT_STICK_Y_AXIS]; // 上に倒すとマイナスになるため反転
+                    // 左および右スティックY軸で前進後退、右スティックX軸で旋回
+                    let leftStickY = -gamepad.axes[LEFT_STICK_Y_AXIS]; // 上に倒すとマイナスになるため反転
+                    let rightStickY = -gamepad.axes[RIGHT_STICK_Y_AXIS];
                     let rawTurn = -gamepad.axes[RIGHT_STICK_X_AXIS]; // 環境に合わせて反転
 
-                    if (rawForward === undefined || isNaN(rawForward)) rawForward = 0;
+                    if (leftStickY === undefined || isNaN(leftStickY)) leftStickY = 0;
+                    if (rightStickY === undefined || isNaN(rightStickY)) rightStickY = 0;
                     if (rawTurn === undefined || isNaN(rawTurn)) rawTurn = 0;
 
-                    if (Math.abs(rawForward) < 0.1) rawForward = 0; // デッドゾーン
+                    if (Math.abs(leftStickY) < 0.1) leftStickY = 0; // デッドゾーン
+                    if (Math.abs(rightStickY) < 0.1) rightStickY = 0;
                     if (Math.abs(rawTurn) < 0.1) rawTurn = 0;
+
+                    // 左スティックYと右スティックY、より大きく倒している方の値を採用
+                    let rawForward = Math.abs(leftStickY) > Math.abs(rightStickY) ? leftStickY : rightStickY;
 
                     debugY.textContent = rawForward.toFixed(2);
                     debugX.textContent = rawTurn.toFixed(2);
@@ -502,7 +510,8 @@
         }
 
         function updateRobotHeading(turnInput) {
-            virtualHeading += turnInput * 3.0;
+            // ★ロボットの方位UIの回転方向を反転させる (+= を -= に変更)
+            virtualHeading -= turnInput * 3.0;
             robotIcon.style.transform = `rotate(${virtualHeading}deg)`;
 
             let displayAngle = Math.round(virtualHeading) % 360;
