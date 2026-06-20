@@ -6,10 +6,8 @@
     <title>ESP32 RC Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* カスタムスタイル */
         body { background-color: #0f172a; color: #f8fafc; overflow: hidden; }
-        
-        /* スピードメーター */
+
         .meter-container { position: relative; width: 250px; height: 125px; overflow: hidden; margin: 0 auto; }
         .meter-bg {
             position: absolute; top: 0; left: 0; width: 250px; height: 250px;
@@ -24,12 +22,10 @@
         .meter-needle {
             position: absolute; bottom: 0px; left: 50%; width: 4px; height: 110px;
             background-color: #ef4444; transform-origin: bottom center;
-            /* 初期位置を真上(0度=停止)にする */
             transform: translateX(-50%) rotate(0deg); transition: transform 0.1s ease-out; z-index: 5;
             box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
         }
 
-        /* ロボット方位UI */
         .radar-bg {
             width: 300px; height: 300px; border-radius: 50%;
             border: 2px dashed #475569; position: relative;
@@ -40,7 +36,7 @@
             position: absolute; width: 100%; height: 1px; background-color: #334155;
         }
         .radar-crosshair.vertical { transform: rotate(90deg); }
-        
+
         #robot-icon {
             width: 80px; height: 120px;
             background-color: #3b82f6; border-radius: 10px;
@@ -48,20 +44,20 @@
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
             display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
         }
-        /* ロボットの前方を表す矢印 */
         #robot-icon::before {
             content: ''; display: block; width: 0; height: 0;
             border-left: 20px solid transparent; border-right: 20px solid transparent;
             border-bottom: 30px solid #f8fafc; margin-top: -15px;
         }
-        
-        /* スライダーのカスタマイズ */
+
         input[type=range] { accent-color: #3b82f6; }
+
+        /* 接続品質インジケータ */
+        .latency-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: 6px; }
     </style>
 </head>
 <body class="h-screen flex flex-col font-sans">
 
-    <!-- ヘッダー -->
     <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center border-b border-gray-700">
         <h1 class="text-2xl font-bold tracking-wider text-blue-400">ESP32 ラジコン コントロールパネル</h1>
         <div class="flex space-x-6 text-sm">
@@ -76,26 +72,22 @@
         </div>
     </header>
 
-    <!-- メインダッシュボード -->
     <main class="flex-1 flex p-6 gap-6">
-        
-        <!-- 左パネル：パワー＆コントロール -->
+
+        <!-- 左パネル -->
         <div class="w-1/3 bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col">
             <h2 class="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-widest border-b border-gray-600 pb-2">出力ステータス</h2>
-            
+
             <div class="flex-1 flex flex-col justify-center">
-                <!-- スピードメーター -->
                 <div class="text-center mb-8 relative">
                     <div class="meter-container relative">
                         <div class="meter-bg"></div>
                         <div class="meter-needle" id="meterNeedle"></div>
                         <div class="meter-center"></div>
-                        <!-- メーターの目盛りテキスト -->
                         <div class="absolute bottom-2 left-6 text-xs text-red-400 font-bold">後進</div>
                         <div class="absolute bottom-2 right-6 text-xs text-blue-400 font-bold">前進</div>
                         <div class="absolute top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500 font-bold">0</div>
                     </div>
-                    <!-- 前進・後進テキストと数値 -->
                     <div class="flex justify-center items-baseline mt-4" id="speedValue">
                         <span class="text-xl text-gray-400 mr-2">停止</span>
                         <span class="text-5xl font-mono font-bold text-gray-400">0</span>
@@ -104,7 +96,6 @@
                     <div class="text-xs text-gray-500 mt-1 uppercase">モータースロットル</div>
                 </div>
 
-                <!-- デューティ比制御 -->
                 <div class="bg-gray-900 p-5 rounded-xl border border-gray-700">
                     <div class="flex justify-between mb-2">
                         <label class="text-sm font-bold text-gray-400">最高速度制限 (XボタンでUP / BボタンでDOWN)</label>
@@ -115,35 +106,32 @@
             </div>
         </div>
 
-        <!-- 中央パネル：ロボット方位・姿勢可視化 -->
+        <!-- 中央パネル -->
         <div class="w-1/3 bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col items-center relative">
             <h2 class="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-widest border-b border-gray-600 pb-2 w-full text-left">ロボットの方位</h2>
-            
+
             <div class="flex-1 flex items-center justify-center w-full">
                 <div class="radar-bg">
                     <div class="radar-crosshair"></div>
                     <div class="radar-crosshair vertical"></div>
-                    <!-- 回転するロボットアイコン -->
                     <div id="robot-icon"></div>
                 </div>
             </div>
-            
+
             <div class="absolute bottom-6 left-0 w-full text-center">
                 <div class="text-3xl font-mono font-bold text-blue-400" id="angleValue">0°</div>
                 <div class="text-xs text-gray-500 uppercase">推定方位角</div>
             </div>
         </div>
 
-        <!-- 右パネル：システム＆通信 -->
+        <!-- 右パネル -->
         <div class="w-1/3 bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col">
             <h2 class="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-widest border-b border-gray-600 pb-2">システム接続</h2>
-            
-            <!-- 接続ボタン -->
+
             <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-xl transition-colors mb-6 shadow-lg shadow-blue-900/50 tracking-widest">
                 ESP32に接続する
             </button>
 
-            <!-- 自動再接続トグル -->
             <div class="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700 mb-6">
                 <div>
                     <div class="font-bold text-gray-300">自動再接続</div>
@@ -155,9 +143,13 @@
                 </label>
             </div>
 
-            <!-- モーター出力生データ (デバッグ用) -->
             <div class="flex-1 bg-gray-900 p-4 rounded-xl border border-gray-700 font-mono text-sm">
-                <h3 class="text-gray-500 mb-3 uppercase tracking-wider text-xs border-b border-gray-700 pb-1">モーター＆入力 生データ</h3>
+                <h3 class="text-gray-500 mb-3 uppercase tracking-wider text-xs border-b border-gray-700 pb-1 flex justify-between items-center">
+                    モーター＆入力 生データ
+                    <span class="flex items-center text-[10px] normal-case">
+                        通信方式: <span id="writeMode" class="text-green-400 ml-1">-</span>
+                    </span>
+                </h3>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
                         <div class="text-gray-500 text-xs mb-1">左モーター (CH-L)</div>
@@ -169,7 +161,6 @@
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-gray-700">
-                    <div class="text-gray-500 text-xs mb-1">コントローラー入力</div>
                     <div class="text-gray-400">Y軸 (前進/後退): <span id="debug-y">0.00</span></div>
                     <div class="text-gray-400">X軸 (旋回): <span id="debug-x">0.00</span></div>
                 </div>
@@ -187,26 +178,25 @@
         let bluetoothDevice = null;
         let controlCharacteristic = null;
         let isConnected = false;
-        let isIntentionalDisconnect = false; 
-        
+        let isIntentionalDisconnect = false;
+        let useWriteWithoutResponse = false; // ★追加: WRITE_NRが使えるか自動判定
+
         let gamepadIndex = null;
-        let maxDuty = 1.0; 
-        
+        let maxDuty = 1.0;
+
         let lastLeftPWM = 0;
         let lastRightPWM = 0;
 
-        // ★追加: スムージング用（現在出力中のPWM値）
         let currentLeftPWM = 0;
         let currentRightPWM = 0;
 
         let lastSendTime = 0;
-        // ★変更: 送信間隔を広げてBluetoothのパンクを防ぐ (50 -> 100)
-        const SEND_INTERVAL_MS = 100; 
+        // ★改善: ファームウェアのデッドタイム/ランプ処理が安定化を担うため、
+        //         送信間隔は120msに少し広げてBLEパケット頻度を抑える
+        const SEND_INTERVAL_MS = 120;
 
-        // 仮想的なロボットの向き (度)
         let virtualHeading = 0;
 
-        // ボタンの過去状態 (エッジ検出用)
         let lastButtonX = false;
         let lastButtonB = false;
 
@@ -215,19 +205,20 @@
         const btStatus = document.getElementById('bt-status');
         const gpStatus = document.getElementById('gp-status');
         const autoReconnectToggle = document.getElementById('autoReconnectToggle');
-        
+
         const dutySlider = document.getElementById('dutySlider');
         const dutyLabel = document.getElementById('dutyLabel');
         const meterNeedle = document.getElementById('meterNeedle');
         const speedValue = document.getElementById('speedValue');
-        
+
         const robotIcon = document.getElementById('robot-icon');
         const angleValue = document.getElementById('angleValue');
-        
+
         const debugL = document.getElementById('debug-l');
         const debugR = document.getElementById('debug-r');
         const debugY = document.getElementById('debug-y');
         const debugX = document.getElementById('debug-x');
+        const writeModeLabel = document.getElementById('writeMode');
 
         // --- Bluetooth接続処理 ---
         connectBtn.addEventListener('click', async () => {
@@ -245,7 +236,7 @@
                     });
                     bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
                 }
-                
+
                 isIntentionalDisconnect = false;
                 await connectGATT();
 
@@ -263,6 +254,13 @@
                 const server = await bluetoothDevice.gatt.connect();
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 controlCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                // ★改善: ファームウェア側がWRITE_NR(応答なし書き込み)に対応していれば
+                //         そちらを使い、ACK待ちのオーバーヘッドとパケットロス時の再送を減らす
+                const props = controlCharacteristic.properties;
+                useWriteWithoutResponse = !!props.writeWithoutResponse;
+                writeModeLabel.textContent = useWriteWithoutResponse ? 'WRITE_NR (高速)' : 'WRITE (標準)';
+                writeModeLabel.className = useWriteWithoutResponse ? 'text-green-400 ml-1' : 'text-yellow-400 ml-1';
 
                 isConnected = true;
                 updateUIConnected();
@@ -290,7 +288,7 @@
             if (!isIntentionalDisconnect && autoReconnectToggle.checked && bluetoothDevice) {
                 btStatus.innerHTML = '<span class="w-3 h-3 rounded-full bg-yellow-500 mr-2 animate-ping"></span>Bluetooth: 再接続待機中...';
                 btStatus.className = 'flex items-center text-yellow-500 font-bold';
-                
+
                 setTimeout(() => {
                     if (!isConnected && autoReconnectToggle.checked) {
                         connectGATT();
@@ -311,6 +309,8 @@
             btStatus.className = 'flex items-center text-red-500 font-bold';
             connectBtn.textContent = 'ESP32に接続する';
             connectBtn.className = 'w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-xl transition-colors mb-6 shadow-lg shadow-blue-900/50 tracking-widest';
+            writeModeLabel.textContent = '-';
+            writeModeLabel.className = 'text-gray-500 ml-1';
         }
 
         // --- デューティ比スライダー処理 ---
@@ -339,7 +339,7 @@
             }
         });
 
-        // --- メインループ (入力取得・描画・送信) ---
+        // --- メインループ ---
         function updateLoop() {
             if (gamepadIndex === null) {
                 const gamepads = navigator.getGamepads();
@@ -356,14 +356,10 @@
             if (gamepadIndex !== null) {
                 const gamepad = navigator.getGamepads()[gamepadIndex];
                 if (gamepad && gamepad.connected) {
-                    
-                    // 速度(デューティ比)調整ボタンの判定を広く取る
-                    // Xボタン(3), Aボタン(1), または十字キーの上(12) を「増やす」とする
+
                     let btnUp = gamepad.buttons[3]?.pressed || gamepad.buttons[1]?.pressed || gamepad.buttons[12]?.pressed || false;
-                    // Bボタン(0), Yボタン(2), または十字キーの下(13) を「減らす」とする
                     let btnDown = gamepad.buttons[0]?.pressed || gamepad.buttons[2]?.pressed || gamepad.buttons[13]?.pressed || false;
 
-                    // 1回押した時だけ反応させる (押しっぱなしで連続変化しないように)
                     if (btnUp && !lastButtonX) {
                         let val = parseInt(dutySlider.value) + 10;
                         if (val > 100) val = 100;
@@ -377,15 +373,14 @@
                     lastButtonX = btnUp;
                     lastButtonB = btnDown;
 
-                    // 左スティックY軸(前進/後退) と 右スティックX軸(旋回) の取得
-                    let forwardInput = -gamepad.axes[1]; 
+                    let forwardInput = -gamepad.axes[1];
                     let turnInput = gamepad.axes[2];
-                    
+
                     if (forwardInput === undefined || isNaN(forwardInput)) {
                         forwardInput = 0;
                         turnInput = 0;
                     }
-                    
+
                     if (Math.abs(forwardInput) < 0.1) forwardInput = 0;
                     if (Math.abs(turnInput) < 0.1) turnInput = 0;
 
@@ -398,19 +393,16 @@
                     leftPower = Math.max(-1.0, Math.min(1.0, leftPower));
                     rightPower = Math.max(-1.0, Math.min(1.0, rightPower));
 
-                    // ★変更: すぐに送信せず、一度「目標値」とする
                     let targetLeftPWM = Math.round(leftPower * maxDuty * 255);
                     let targetRightPWM = Math.round(rightPower * maxDuty * 255);
 
-                    // ★追加: ソフトスタート(突入電流対策) 
-                    // 急にスティックを倒しても、0.1の割合で徐々に追従する
+                    // ソフトスタート(JS側)。実際の急峻な反転対策はファームウェアのデッドタイムが担う。
                     currentLeftPWM += (targetLeftPWM - currentLeftPWM) * 0.1;
                     currentRightPWM += (targetRightPWM - currentRightPWM) * 0.1;
 
                     let sendLeftPWM = Math.round(currentLeftPWM);
                     let sendRightPWM = Math.round(currentRightPWM);
 
-                    // ★追加: モーターの唸り音・微小電流によるノイズ防止
                     if (Math.abs(sendLeftPWM) < 15) sendLeftPWM = 0;
                     if (Math.abs(sendRightPWM) < 15) sendRightPWM = 0;
 
@@ -422,21 +414,17 @@
             requestAnimationFrame(updateLoop);
         }
 
-        // メーターの更新 (前進/後進対応)
         function updateMeter(l, r) {
-            // 左右モーターの平均値を出して、全体としての前進・後退の強さを出す
             let avgPWM = (l + r) / 2;
             let speedPercent = (avgPWM / 255) * 100;
-            
-            // 角度の計算 (-100% が -90度(左)、0% が 0度(真上)、+100% が 90度(右))
+
             let angle = (speedPercent / 100) * 90;
             meterNeedle.style.transform = `translateX(-50%) rotate(${angle}deg)`;
-            
-            // UIテキストの色と文字の切り替え
+
             let directionText = "停止";
             let colorClass = "text-gray-400";
             let numberColorClass = "text-gray-400";
-            
+
             if (speedPercent > 5) {
                 directionText = "前進";
                 colorClass = "text-blue-400";
@@ -457,18 +445,13 @@
             debugR.textContent = r;
         }
 
-        // ロボット方位のシミュレーション計算
         function updateRobotHeading(turnInput) {
             virtualHeading += turnInput * 3.0;
-            
-            // アニメーションの巻き戻りを防ぐため、virtualHeading自体は0~360に制限せず無限に増減させる
-            // CSSのrotate()は360度を超えても回り続ける
             robotIcon.style.transform = `rotate(${virtualHeading}deg)`;
-            
-            // テキスト表示用には 0~359度 に変換して表示する
+
             let displayAngle = Math.round(virtualHeading) % 360;
             if (displayAngle < 0) displayAngle += 360;
-            
+
             angleValue.textContent = `${displayAngle}°`;
         }
 
@@ -484,12 +467,19 @@
 
                     const commandString = `${l},${r}\n`;
                     const encoder = new TextEncoder();
+                    const data = encoder.encode(commandString);
                     try {
-                        await controlCharacteristic.writeValue(encoder.encode(commandString));
+                        // ★改善: 可能ならWRITE_NR(応答なし)で送信し、ACK待ちレイテンシと
+                        //         ノイズによる再送の影響を減らす
+                        if (useWriteWithoutResponse) {
+                            await controlCharacteristic.writeValueWithoutResponse(data);
+                        } else {
+                            await controlCharacteristic.writeValue(data);
+                        }
                     } catch (err) {
                         console.error('送信エラー:', err);
-                        if(isConnected) {
-                             bluetoothDevice.gatt.disconnect();
+                        if (isConnected) {
+                            bluetoothDevice.gatt.disconnect();
                         }
                     }
                 }
