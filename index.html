@@ -161,8 +161,13 @@
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-gray-700">
-                    <div class="text-gray-400">Y軸 (前進/後退): <span id="debug-y">0.00</span></div>
-                    <div class="text-gray-400">X軸 (旋回): <span id="debug-x">0.00</span></div>
+                    <div class="text-gray-400">右スティックY軸 (前進/後退): <span id="debug-y">0.00</span></div>
+                    <div class="text-gray-400">右スティックX軸 (旋回): <span id="debug-x">0.00</span></div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <div class="text-gray-500 text-[10px] mb-1">診断: 全axes生データ (スティックを動かして変化する番号を確認)</div>
+                    <div class="text-yellow-400 text-xs break-all" id="debug-axes-raw">axes: -</div>
+                    <div class="text-gray-500 text-[10px] mt-1" id="debug-mapping">mapping: -</div>
                 </div>
             </div>
         </div>
@@ -218,7 +223,15 @@
         const debugR = document.getElementById('debug-r');
         const debugY = document.getElementById('debug-y');
         const debugX = document.getElementById('debug-x');
+        const debugAxesRaw = document.getElementById('debug-axes-raw');
+        const debugMapping = document.getElementById('debug-mapping');
         const writeModeLabel = document.getElementById('writeMode');
+
+        // ★診断用: 右スティックのY軸が何番のaxisに対応するかはコントローラー/環境依存。
+        //          画面下の「診断: 全axes生データ」を見ながら、実際に動く番号に変更してください。
+        //          (標準的なゲームパッドでは3が右スティックYだが、環境によって異なる場合がある)
+        const RIGHT_STICK_Y_AXIS = 3;
+        const RIGHT_STICK_X_AXIS = 2;
 
         // --- Bluetooth接続処理 ---
         connectBtn.addEventListener('click', async () => {
@@ -373,8 +386,14 @@
                     lastButtonX = btnUp;
                     lastButtonB = btnDown;
 
-                    let forwardInput = -gamepad.axes[1];
-                    let turnInput = gamepad.axes[2];
+                    // 診断: 全axesの生データとmapping種別を表示(右スティックの番号特定用)
+                    debugAxesRaw.textContent = 'axes: ' + gamepad.axes.map((a, i) => `[${i}]=${a.toFixed(2)}`).join('  ');
+                    debugMapping.textContent = 'mapping: ' + (gamepad.mapping || '(empty/raw)');
+
+                    // ★変更: 左スティック(axes[0], axes[1])は使用しない。
+                    //         右スティックのみで前進/後退(Y軸)・旋回(X軸)を操作する。
+                    let forwardInput = -gamepad.axes[RIGHT_STICK_Y_AXIS]; // 右スティックY軸 (上=前進)
+                    let turnInput = -gamepad.axes[RIGHT_STICK_X_AXIS];    // 右スティックX軸 (符号反転済み)
 
                     if (forwardInput === undefined || isNaN(forwardInput)) {
                         forwardInput = 0;
