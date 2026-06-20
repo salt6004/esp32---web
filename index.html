@@ -371,8 +371,8 @@
                     lastButtonX = btnUp;
                     lastButtonB = btnDown;
 
-                    // 右スティックの取得
-                    let forwardInput = -gamepad.axes[3]; 
+                    // 左スティックY軸(前進/後退) と 右スティックX軸(旋回) の取得
+                    let forwardInput = -gamepad.axes[1]; 
                     let turnInput = gamepad.axes[2];
                     
                     if (forwardInput === undefined || isNaN(forwardInput)) {
