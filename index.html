@@ -105,12 +105,30 @@
                     <input type="range" id="dutyForwardSlider" min="0" max="100" value="100" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
                 </div>
                 
-                <div class="bg-gray-900 p-4 rounded-xl border border-gray-700">
+                <div class="bg-gray-900 p-4 rounded-xl border border-gray-700 mb-4">
                     <div class="flex justify-between mb-2">
                         <label class="text-xs font-bold text-gray-400">旋回スピード制限 (右/左ボタン)</label>
                         <span id="dutyTurnLabel" class="text-sm font-bold text-green-400 font-mono">100%</span>
                     </div>
                     <input type="range" id="dutyTurnSlider" min="0" max="100" value="100" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- 左右モータートリム設定 -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-900 p-3 rounded-xl border border-gray-700">
+                        <div class="flex justify-between mb-2">
+                            <label class="text-[10px] font-bold text-gray-400">左補正 (L/ZL)</label>
+                            <span id="trimLeftLabel" class="text-xs font-bold text-orange-400 font-mono">100%</span>
+                        </div>
+                        <input type="range" id="trimLeftSlider" min="0" max="100" value="100" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" style="accent-color: #fb923c;">
+                    </div>
+                    <div class="bg-gray-900 p-3 rounded-xl border border-gray-700">
+                        <div class="flex justify-between mb-2">
+                            <label class="text-[10px] font-bold text-gray-400">右補正 (R/ZR)</label>
+                            <span id="trimRightLabel" class="text-xs font-bold text-purple-400 font-mono">100%</span>
+                        </div>
+                        <input type="range" id="trimRightSlider" min="0" max="100" value="100" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" style="accent-color: #c084fc;">
+                    </div>
                 </div>
             </div>
         </div>
@@ -201,6 +219,10 @@
         let maxDutyForward = 1.0;
         let maxDutyTurn = 1.0;
 
+        // 左右モーター出力補正(トリム)変数
+        let trimLeft = 1.0;
+        let trimRight = 1.0;
+
         let lastLeftPWM = 0;
         let lastRightPWM = 0;
 
@@ -218,6 +240,11 @@
         let lastBtnTurnUp = false;
         let lastBtnTurnDown = false;
 
+        let lastBtnL = false;
+        let lastBtnZL = false;
+        let lastBtnR = false;
+        let lastBtnZR = false;
+
         // --- DOM要素 ---
         const connectBtn = document.getElementById('connectBtn');
         const btStatus = document.getElementById('bt-status');
@@ -228,6 +255,11 @@
         const dutyForwardLabel = document.getElementById('dutyForwardLabel');
         const dutyTurnSlider = document.getElementById('dutyTurnSlider');
         const dutyTurnLabel = document.getElementById('dutyTurnLabel');
+
+        const trimLeftSlider = document.getElementById('trimLeftSlider');
+        const trimLeftLabel = document.getElementById('trimLeftLabel');
+        const trimRightSlider = document.getElementById('trimRightSlider');
+        const trimRightLabel = document.getElementById('trimRightLabel');
 
         const meterNeedle = document.getElementById('meterNeedle');
         const speedValue = document.getElementById('speedValue');
@@ -355,8 +387,22 @@
             maxDutyTurn = val / 100.0;
         }
 
+        function updateTrimLeft(val) {
+            trimLeftSlider.value = val;
+            trimLeftLabel.textContent = `${val}%`;
+            trimLeft = val / 100.0;
+        }
+
+        function updateTrimRight(val) {
+            trimRightSlider.value = val;
+            trimRightLabel.textContent = `${val}%`;
+            trimRight = val / 100.0;
+        }
+
         dutyForwardSlider.addEventListener('input', (e) => updateDutyForward(e.target.value));
         dutyTurnSlider.addEventListener('input', (e) => updateDutyTurn(e.target.value));
+        trimLeftSlider.addEventListener('input', (e) => updateTrimLeft(e.target.value));
+        trimRightSlider.addEventListener('input', (e) => updateTrimRight(e.target.value));
 
         // --- Gamepad接続イベント ---
         window.addEventListener("gamepadconnected", (e) => {
@@ -399,6 +445,11 @@
                     let btnTurnUp = gamepad.buttons[1]?.pressed || gamepad.buttons[15]?.pressed || false; // 右
                     let btnTurnDown = gamepad.buttons[2]?.pressed || gamepad.buttons[14]?.pressed || false; // 左
 
+                    let btnL = gamepad.buttons[4]?.pressed || false;  // L
+                    let btnR = gamepad.buttons[5]?.pressed || false;  // R
+                    let btnZL = gamepad.buttons[6]?.pressed || false; // ZL
+                    let btnZR = gamepad.buttons[7]?.pressed || false; // ZR
+
                     if (btnFwdUp && !lastBtnFwdUp) {
                         let val = parseInt(dutyForwardSlider.value) + 10;
                         updateDutyForward(Math.min(100, val));
@@ -416,10 +467,35 @@
                         updateDutyTurn(Math.max(0, val));
                     }
 
+                    // L/ZLで左モーター補正 (5%刻み)
+                    if (btnL && !lastBtnL) {
+                        let val = parseInt(trimLeftSlider.value) + 5;
+                        updateTrimLeft(Math.min(100, val));
+                    }
+                    if (btnZL && !lastBtnZL) {
+                        let val = parseInt(trimLeftSlider.value) - 5;
+                        updateTrimLeft(Math.max(0, val));
+                    }
+
+                    // R/ZRで右モーター補正 (5%刻み)
+                    if (btnR && !lastBtnR) {
+                        let val = parseInt(trimRightSlider.value) + 5;
+                        updateTrimRight(Math.min(100, val));
+                    }
+                    if (btnZR && !lastBtnZR) {
+                        let val = parseInt(trimRightSlider.value) - 5;
+                        updateTrimRight(Math.max(0, val));
+                    }
+
                     lastBtnFwdUp = btnFwdUp;
                     lastBtnFwdDown = btnFwdDown;
                     lastBtnTurnUp = btnTurnUp;
                     lastBtnTurnDown = btnTurnDown;
+
+                    lastBtnL = btnL;
+                    lastBtnZL = btnZL;
+                    lastBtnR = btnR;
+                    lastBtnZR = btnZR;
 
                     // 診断用表示
                     debugAxesRaw.textContent = 'axes: ' + gamepad.axes.map((a, i) => `[${i}]=${a.toFixed(2)}`).join('  ');
@@ -449,9 +525,9 @@
                     let forwardPower = rawForward * maxDutyForward;
                     let turnPower = rawTurn * maxDutyTurn;
 
-                    // 左右モーターへの配分
-                    let leftPower = forwardPower + turnPower;
-                    let rightPower = forwardPower - turnPower;
+                    // 左右モーターへの配分 (さらに個別の出力補正を掛ける)
+                    let leftPower = (forwardPower + turnPower) * trimLeft;
+                    let rightPower = (forwardPower - turnPower) * trimRight;
 
                     // 上限/下限のクリッピング
                     leftPower = Math.max(-1.0, Math.min(1.0, leftPower));
