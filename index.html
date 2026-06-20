@@ -198,6 +198,10 @@
         // 仮想的なロボットの向き (度)
         let virtualHeading = 0;
 
+        // ボタンの過去状態 (エッジ検出用)
+        let lastButtonX = false;
+        let lastButtonB = false;
+
         // --- DOM要素 ---
         const connectBtn = document.getElementById('connectBtn');
         const btStatus = document.getElementById('bt-status');
@@ -311,10 +315,14 @@
         }
 
         // --- デューティ比スライダー処理 ---
-        dutySlider.addEventListener('input', (e) => {
-            const val = e.target.value;
+        function updateDuty(val) {
+            dutySlider.value = val;
             dutyLabel.textContent = `${val}%`;
             maxDuty = val / 100.0;
+        }
+
+        dutySlider.addEventListener('input', (e) => {
+            updateDuty(e.target.value);
         });
 
         // --- Gamepad接続イベント ---
@@ -334,15 +342,51 @@
 
         // --- メインループ (入力取得・描画・送信) ---
         function updateLoop() {
+            // Gamepadが未検出の場合はポーリングで探す
+            if (gamepadIndex === null) {
+                const gamepads = navigator.getGamepads();
+                for (let i = 0; i < gamepads.length; i++) {
+                    if (gamepads[i] && gamepads[i].connected) {
+                        gamepadIndex = i;
+                        gpStatus.innerHTML = '<span class="w-3 h-3 rounded-full bg-green-500 mr-2 shadow-[0_0_8px_#22c55e]"></span>Switch ProCon: 認識完了';
+                        gpStatus.className = 'flex items-center text-green-400 font-bold';
+                        break;
+                    }
+                }
+            }
+
             if (gamepadIndex !== null) {
                 // Gamepad APIは毎フレーム取得し直す必要がある
                 const gamepad = navigator.getGamepads()[gamepadIndex];
-                if (gamepad) {
-                    // Switch Proコントローラーのマッピング想定
-                    // axes[1]: 左スティック Y軸 (上が -1.0, 下が 1.0) -> 前進・後退
+                if (gamepad && gamepad.connected) {
+                    // デューティ比のボタン操作 (X: 上ボタン=3, B: 下ボタン=0)
+                    let currentButtonX = gamepad.buttons[3]?.pressed || false;
+                    let currentButtonB = gamepad.buttons[0]?.pressed || false;
+
+                    if (currentButtonX && !lastButtonX) {
+                        let val = parseInt(dutySlider.value) + 10;
+                        if (val > 100) val = 100;
+                        updateDuty(val);
+                    }
+                    if (currentButtonB && !lastButtonB) {
+                        let val = parseInt(dutySlider.value) - 10;
+                        if (val < 0) val = 0;
+                        updateDuty(val);
+                    }
+                    lastButtonX = currentButtonX;
+                    lastButtonB = currentButtonB;
+
+                    // Switch Proコントローラーのマッピング (右ジョイスティック操作)
+                    // axes[3]: 右スティック Y軸 (上が -1.0, 下が 1.0) -> 前進・後退
                     // axes[2]: 右スティック X軸 (左が -1.0, 右が 1.0) -> 旋回
-                    let forwardInput = -gamepad.axes[1]; // 上を正にするために反転
+                    let forwardInput = -gamepad.axes[3]; // 上を正にするために反転
                     let turnInput = gamepad.axes[2];
+                    
+                    // 右スティックが見当たらない場合のフォールバック対策
+                    if (forwardInput === undefined || isNaN(forwardInput)) {
+                        forwardInput = 0;
+                        turnInput = 0;
+                    }
                     
                     // デッドゾーン (スティックの遊び/ドリフト対策)
                     if (Math.abs(forwardInput) < 0.1) forwardInput = 0;
