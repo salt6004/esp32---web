@@ -502,19 +502,26 @@
                     debugAxesRaw.textContent = 'axes: ' + gamepad.axes.map((a, i) => `[${i}]=${a.toFixed(2)}`).join('  ');
                     debugMapping.textContent = 'mapping: ' + (gamepad.mapping || '(empty/raw)');
 
+                    // --- スティック入力補正関数 ---
+                    // スティックが物理的に最後まで倒しきれないコントローラーへの対策として、
+                    // 85%ほど倒した時点で100%の出力になるようスケーリングします。
+                    const applyDeadzone = (val) => {
+                        if (Math.abs(val) < 0.1) return 0.0; // 中央の遊び
+                        let mapped = (Math.abs(val) - 0.1) / 0.75; // 0.1〜0.85を0.0〜1.0に拡張
+                        if (mapped > 1.0) mapped = 1.0;
+                        return val > 0 ? mapped : -mapped;
+                    };
+
                     // --- スティック入力処理 ---
                     // 左および右スティックY軸で前進後退、右スティックX軸で旋回
-                    let leftStickY = -gamepad.axes[LEFT_STICK_Y_AXIS]; // 上に倒すとマイナスになるため反転
-                    let rightStickY = -gamepad.axes[RIGHT_STICK_Y_AXIS];
-                    let rawTurn = -gamepad.axes[RIGHT_STICK_X_AXIS]; // 環境に合わせて反転
+                    let leftStickY_raw = -gamepad.axes[LEFT_STICK_Y_AXIS]; // 上に倒すとマイナスになるため反転
+                    let rightStickY_raw = -gamepad.axes[RIGHT_STICK_Y_AXIS];
+                    let rawTurn_raw = -gamepad.axes[RIGHT_STICK_X_AXIS]; // 環境に合わせて反転
 
-                    if (leftStickY === undefined || isNaN(leftStickY)) leftStickY = 0;
-                    if (rightStickY === undefined || isNaN(rightStickY)) rightStickY = 0;
-                    if (rawTurn === undefined || isNaN(rawTurn)) rawTurn = 0;
-
-                    if (Math.abs(leftStickY) < 0.1) leftStickY = 0; // デッドゾーン
-                    if (Math.abs(rightStickY) < 0.1) rightStickY = 0;
-                    if (Math.abs(rawTurn) < 0.1) rawTurn = 0;
+                    // 未接続時のNaN回避と、外側の遊び補正を適用
+                    let leftStickY = applyDeadzone(isNaN(leftStickY_raw) ? 0 : leftStickY_raw);
+                    let rightStickY = applyDeadzone(isNaN(rightStickY_raw) ? 0 : rightStickY_raw);
+                    let rawTurn = applyDeadzone(isNaN(rawTurn_raw) ? 0 : rawTurn_raw);
 
                     // 左スティックYと右スティックY、より大きく倒している方の値を採用
                     let rawForward = Math.abs(leftStickY) > Math.abs(rightStickY) ? leftStickY : rightStickY;
