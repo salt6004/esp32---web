@@ -230,7 +230,8 @@
         let currentRightPWM = 0;
 
         let lastSendTime = 0;
-        const SEND_INTERVAL_MS = 120;
+        // ★レスポンス向上のため、送信間隔を120msから50msに短縮
+        const SEND_INTERVAL_MS = 50;
 
         let virtualHeading = 0;
 
@@ -537,8 +538,9 @@
                     let targetRightPWM = Math.round(rightPower * 255);
 
                     // ソフトスタート(JS側)
-                    currentLeftPWM += (targetLeftPWM - currentLeftPWM) * 0.1;
-                    currentRightPWM += (targetRightPWM - currentRightPWM) * 0.1;
+                    // ★レスポンス向上のため、追従速度を 0.1 から 0.4 に引き上げ(よりダイレクトな操作感に)
+                    currentLeftPWM += (targetLeftPWM - currentLeftPWM) * 0.4;
+                    currentRightPWM += (targetRightPWM - currentRightPWM) * 0.4;
 
                     let sendLeftPWM = Math.round(currentLeftPWM);
                     let sendRightPWM = Math.round(currentRightPWM);
