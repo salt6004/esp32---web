@@ -545,28 +545,17 @@
                     let targetRightPWM = Math.round(rightPower * 255);
 
                     // ソフトスタート(JS側)
-                    // ★改善: 以前は「目標値との差(diff) × 係数」で近づけていたため、
-                    //         スティックを一気に倒して差(diff)が大きくなるほど、
-                    //         1フレームで送るPWMの変化量も一気に大きくなってしまっていた
-                    //         (=スティックを素早く倒すほど急激な電流要求が発生し、
-                    //           電源が落ち込んでモーターが動かなくなる原因)。
-                    //         「差に比例」ではなく「1フレームあたりの変化量を固定の上限で制限する」
-                    //         方式に変更し、スティックをどれだけ素早く倒しても
-                    //         実際にモーターへ送るPWMの変化速度は一定以下になるようにする。
-                    const RAMP_STEP_NORMAL  = 14; // 通常方向(前進・減速・停止)への1フレーム最大変化量
-                    const RAMP_STEP_REVERSE = 5;  // 後退方向へ加速する時の1フレーム最大変化量(より控えめ)
+                    // ★後進時の突入電流による保護回路の作動（一気に倒すと動かない現象）を防ぐため、
+                    // 後進方向へ加速するときだけ自動的に追従速度をマイルド(0.15)にします。
+                    // 前進時や停止時のレスポンス(0.4)は維持します。
+                    let leftDiff = targetLeftPWM - currentLeftPWM;
+                    let rightDiff = targetRightPWM - currentRightPWM;
 
-                    function rampStep(current, target, maxStep) {
-                        if (current < target) return Math.min(current + maxStep, target);
-                        if (current > target) return Math.max(current - maxStep, target);
-                        return current;
-                    }
+                    let leftCoeff = (targetLeftPWM < 0 && leftDiff < 0) ? 0.15 : 0.4;
+                    let rightCoeff = (targetRightPWM < 0 && rightDiff < 0) ? 0.15 : 0.4;
 
-                    let leftAccelToReverse  = (targetLeftPWM  < 0 && targetLeftPWM  < currentLeftPWM);
-                    let rightAccelToReverse = (targetRightPWM < 0 && targetRightPWM < currentRightPWM);
-
-                    currentLeftPWM  = rampStep(currentLeftPWM,  targetLeftPWM,  leftAccelToReverse  ? RAMP_STEP_REVERSE : RAMP_STEP_NORMAL);
-                    currentRightPWM = rampStep(currentRightPWM, targetRightPWM, rightAccelToReverse ? RAMP_STEP_REVERSE : RAMP_STEP_NORMAL);
+                    currentLeftPWM += leftDiff * leftCoeff;
+                    currentRightPWM += rightDiff * rightCoeff;
 
                     let sendLeftPWM = Math.round(currentLeftPWM);
                     let sendRightPWM = Math.round(currentRightPWM);
@@ -628,8 +617,13 @@
             if (!isConnected || !controlCharacteristic) return;
 
             const now = Date.now();
+            // まず、最低限の送信間隔(50ms)が経過しているかチェック
             if (now - lastSendTime > SEND_INTERVAL_MS) {
-                if (l !== lastLeftPWM || r !== lastRightPWM) {
+                
+                // ★修正箇所：
+                // 値が変化した時だけでなく、前回送信から300ms以上経過した場合も
+                // フェールセーフ回避(キープアライブ)のために同じ値を再送信する
+                if (l !== lastLeftPWM || r !== lastRightPWM || now - lastSendTime > 300) {
                     lastLeftPWM = l;
                     lastRightPWM = r;
                     lastSendTime = now;
