@@ -212,6 +212,8 @@
         let isConnected = false;
         let isIntentionalDisconnect = false;
         let useWriteWithoutResponse = false;
+        
+        let isSending = false; // ★追加: 通信が渋滞するのを防ぐためのフラグ
 
         let gamepadIndex = null;
         
@@ -230,7 +232,6 @@
         let currentRightPWM = 0;
 
         let lastSendTime = 0;
-        // ★レスポンス向上のため、送信間隔を120msから50msに短縮
         const SEND_INTERVAL_MS = 50;
 
         let virtualHeading = 0;
@@ -277,11 +278,8 @@
         const writeModeLabel = document.getElementById('writeMode');
 
         // ★2スティック操作用の軸設定
-        // 左スティックの上下 (標準的なコントローラーでは1番)
         const LEFT_STICK_Y_AXIS = 1;
-        // 右スティックの左右 (標準的なコントローラーでは2番、たまに3番)
         const RIGHT_STICK_X_AXIS = 2; 
-        // 右スティックの上下 (標準的なコントローラーでは3番)
         const RIGHT_STICK_Y_AXIS = 3;
 
         // --- Bluetooth接続処理 ---
@@ -341,6 +339,7 @@
         function onDisconnected() {
             isConnected = false;
             controlCharacteristic = null;
+            isSending = false;
             updateUIDisconnected();
             console.log('Bluetooth切断検知');
             handleReconnect();
@@ -438,9 +437,7 @@
                 const gamepad = navigator.getGamepads()[gamepadIndex];
                 if (gamepad && gamepad.connected) {
 
-                    // --- ボタンによるスピード制限の変更 ---
-                    // 標準的なPC用コントローラー配列を想定（十字キーも対応）
-                    // 3=X(上位置), 0=B(下位置), 1=A(右位置), 2=Y(左位置) ※OSによって入れ替わる場合があります
+                    // --- ボタン処理 ---
                     let btnFwdUp = gamepad.buttons[3]?.pressed || gamepad.buttons[12]?.pressed || false; // 上
                     let btnFwdDown = gamepad.buttons[0]?.pressed || gamepad.buttons[13]?.pressed || false; // 下
                     let btnTurnUp = gamepad.buttons[1]?.pressed || gamepad.buttons[15]?.pressed || false; // 右
@@ -468,7 +465,6 @@
                         updateDutyTurn(Math.max(0, val));
                     }
 
-                    // L/ZLで左モーター補正 (5%刻み)
                     if (btnL && !lastBtnL) {
                         let val = parseInt(trimLeftSlider.value) + 5;
                         updateTrimLeft(Math.min(100, val));
@@ -478,7 +474,6 @@
                         updateTrimLeft(Math.max(0, val));
                     }
 
-                    // R/ZRで右モーター補正 (5%刻み)
                     if (btnR && !lastBtnR) {
                         let val = parseInt(trimRightSlider.value) + 5;
                         updateTrimRight(Math.min(100, val));
@@ -498,64 +493,58 @@
                     lastBtnR = btnR;
                     lastBtnZR = btnZR;
 
-                    // 診断用表示
                     debugAxesRaw.textContent = 'axes: ' + gamepad.axes.map((a, i) => `[${i}]=${a.toFixed(2)}`).join('  ');
                     debugMapping.textContent = 'mapping: ' + (gamepad.mapping || '(empty/raw)');
 
-                    // --- スティック入力補正関数 ---
-                    // スティックが物理的に最後まで倒しきれないコントローラーへの対策として、
-                    // 85%ほど倒した時点で100%の出力になるようスケーリングします。
                     const applyDeadzone = (val) => {
-                        if (Math.abs(val) < 0.1) return 0.0; // 中央の遊び
-                        let mapped = (Math.abs(val) - 0.1) / 0.75; // 0.1〜0.85を0.0〜1.0に拡張
+                        if (Math.abs(val) < 0.1) return 0.0;
+                        let mapped = (Math.abs(val) - 0.1) / 0.75;
                         if (mapped > 1.0) mapped = 1.0;
                         return val > 0 ? mapped : -mapped;
                     };
 
-                    // --- スティック入力処理 ---
-                    // 左および右スティックY軸で前進後退、右スティックX軸で旋回
-                    let leftStickY_raw = -gamepad.axes[LEFT_STICK_Y_AXIS]; // 上に倒すとマイナスになるため反転
+                    let leftStickY_raw = -gamepad.axes[LEFT_STICK_Y_AXIS];
                     let rightStickY_raw = -gamepad.axes[RIGHT_STICK_Y_AXIS];
-                    let rawTurn_raw = -gamepad.axes[RIGHT_STICK_X_AXIS]; // 環境に合わせて反転
+                    let rawTurn_raw = -gamepad.axes[RIGHT_STICK_X_AXIS];
 
-                    // 未接続時のNaN回避と、外側の遊び補正を適用
                     let leftStickY = applyDeadzone(isNaN(leftStickY_raw) ? 0 : leftStickY_raw);
                     let rightStickY = applyDeadzone(isNaN(rightStickY_raw) ? 0 : rightStickY_raw);
                     let rawTurn = applyDeadzone(isNaN(rawTurn_raw) ? 0 : rawTurn_raw);
 
-                    // 左スティックYと右スティックY、より大きく倒している方の値を採用
                     let rawForward = Math.abs(leftStickY) > Math.abs(rightStickY) ? leftStickY : rightStickY;
 
                     debugY.textContent = rawForward.toFixed(2);
                     debugX.textContent = rawTurn.toFixed(2);
 
-                    // 独立したスピード制限を掛ける
                     let forwardPower = rawForward * maxDutyForward;
                     let turnPower = rawTurn * maxDutyTurn;
 
-                    // 左右モーターへの配分 (さらに個別の出力補正を掛ける)
                     let leftPower = (forwardPower + turnPower) * trimLeft;
                     let rightPower = (forwardPower - turnPower) * trimRight;
 
-                    // 上限/下限のクリッピング
                     leftPower = Math.max(-1.0, Math.min(1.0, leftPower));
                     rightPower = Math.max(-1.0, Math.min(1.0, rightPower));
 
                     let targetLeftPWM = Math.round(leftPower * 255);
                     let targetRightPWM = Math.round(rightPower * 255);
 
-                    // ソフトスタート(JS側)
-                    // ★後進時の突入電流による保護回路の作動（一気に倒すと動かない現象）を防ぐため、
-                    // 後進方向へ加速するときだけ自動的に追従速度をマイルド(0.15)にします。
-                    // 前進時や停止時のレスポンス(0.4)は維持します。
+                    // ★修正箇所: 後進時も確実に100% (-255) に到達するように計算式を補強
                     let leftDiff = targetLeftPWM - currentLeftPWM;
                     let rightDiff = targetRightPWM - currentRightPWM;
 
-                    let leftCoeff = (targetLeftPWM < 0 && leftDiff < 0) ? 0.15 : 0.4;
-                    let rightCoeff = (targetRightPWM < 0 && rightDiff < 0) ? 0.15 : 0.4;
+                    if (Math.abs(leftDiff) <= 2) {
+                        currentLeftPWM = targetLeftPWM; // 目標との差がわずかなら一気に到達させる
+                    } else {
+                        let leftCoeff = (targetLeftPWM < 0 && leftDiff < 0) ? 0.15 : 0.4;
+                        currentLeftPWM += leftDiff * leftCoeff;
+                    }
 
-                    currentLeftPWM += leftDiff * leftCoeff;
-                    currentRightPWM += rightDiff * rightCoeff;
+                    if (Math.abs(rightDiff) <= 2) {
+                        currentRightPWM = targetRightPWM; // 目標との差がわずかなら一気に到達させる
+                    } else {
+                        let rightCoeff = (targetRightPWM < 0 && rightDiff < 0) ? 0.15 : 0.4;
+                        currentRightPWM += rightDiff * rightCoeff;
+                    }
 
                     let sendLeftPWM = Math.round(currentLeftPWM);
                     let sendRightPWM = Math.round(currentRightPWM);
@@ -603,7 +592,6 @@
         }
 
         function updateRobotHeading(turnInput) {
-            // ★ロボットの方位UIの回転方向を反転させる (+= を -= に変更)
             virtualHeading -= turnInput * 3.0;
             robotIcon.style.transform = `rotate(${virtualHeading}deg)`;
 
@@ -614,16 +602,14 @@
         }
 
         async function sendDataToESP32(l, r) {
-            if (!isConnected || !controlCharacteristic) return;
+            // ★修正箇所: isSending フラグを使って、通信が渋滞している時は次の送信を待つ
+            if (!isConnected || !controlCharacteristic || isSending) return;
 
             const now = Date.now();
-            // まず、最低限の送信間隔(50ms)が経過しているかチェック
             if (now - lastSendTime > SEND_INTERVAL_MS) {
                 
-                // ★修正箇所：
-                // 値が変化した時だけでなく、前回送信から300ms以上経過した場合も
-                // フェールセーフ回避(キープアライブ)のために同じ値を再送信する
                 if (l !== lastLeftPWM || r !== lastRightPWM || now - lastSendTime > 300) {
+                    isSending = true; // 送信中フラグON
                     lastLeftPWM = l;
                     lastRightPWM = r;
                     lastSendTime = now;
@@ -638,10 +624,10 @@
                             await controlCharacteristic.writeValue(data);
                         }
                     } catch (err) {
-                        console.error('送信エラー:', err);
-                        if (isConnected) {
-                            bluetoothDevice.gatt.disconnect();
-                        }
+                        // ★修正箇所: 一時的な通信ノイズでエラーが出ても、自分から切断（disconnect）しないように変更
+                        console.warn('送信一時エラー (無視して継続します):', err);
+                    } finally {
+                        isSending = false; // 送信中フラグOFF
                     }
                 }
             }
